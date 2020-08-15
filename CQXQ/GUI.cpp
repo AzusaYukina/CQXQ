@@ -10,9 +10,11 @@
 #include <type_traits>
 #include <memory>
 #include <utility>
+#include <fstream>
 
 #include "GlobalVar.h"
 #include "native.h"
+#include <filesystem>
 
 using namespace std;
 
@@ -501,10 +503,18 @@ LRESULT GUI::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam)
 				plugins[SelectedIndex].enabled = false;
 				ButtonEnable.SetText("启用");
 				if (!plugins[SelectedIndex].events.count(CQ_eventDisable)) return 0;
-				const auto disable = IntMethod(GetProcAddress(plugins[SelectedIndex].dll, plugins[SelectedIndex].events.at(CQ_eventDisable).c_str()));
-				if (disable)
+				const auto disable = IntMethod(plugins[SelectedIndex].events.at(CQ_eventDisable).event);
+				if (disable && EnabledEventCalled)
 				{
 					disable();
+				}
+				std::filesystem::path p(rootPath);
+				p.append("CQPlugins").append(plugins[SelectedIndex].file).replace_extension(".disable");
+				if (!std::filesystem::exists(p))
+				{
+					ofstream fstream(p); // 创建文件
+					fstream << "This file is used to disable the corresponding plugin";
+					fstream.close();
 				}
 			}
 			else
@@ -512,10 +522,16 @@ LRESULT GUI::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam)
 				plugins[SelectedIndex].enabled = true;
 				ButtonEnable.SetText("停用");
 				if (!plugins[SelectedIndex].events.count(CQ_eventEnable)) return 0;
-				const auto enable = IntMethod(GetProcAddress(plugins[SelectedIndex].dll, plugins[SelectedIndex].events.at(CQ_eventEnable).c_str()));
-				if (enable)
+				const auto enable = IntMethod(plugins[SelectedIndex].events.at(CQ_eventEnable).event);
+				if (enable && EnabledEventCalled)
 				{
 					enable();
+				}
+				std::filesystem::path p(rootPath);
+				p.append("CQPlugins").append(plugins[SelectedIndex].file).replace_extension(".disable");
+				if (std::filesystem::exists(p))
+				{
+					std::filesystem::remove(p);
 				}
 			}
 		}
@@ -525,6 +541,16 @@ LRESULT GUI::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam)
 			if (SelectedIndex == -1)
 			{
 				MessageBoxA(m_hwnd, "请先双击左侧列表选择一个插件!", "CQXQ", MB_OK);
+				return 0;
+			}
+			if (!plugins[SelectedIndex].enabled)
+			{
+				MessageBoxA(m_hwnd, "插件尚未启用，请先启用插件！", "CQXQ", MB_OK);
+				return 0;
+			}
+			if (!EnabledEventCalled)
+			{
+				MessageBoxA(m_hwnd, "插件尚未初始化完毕，等待QQ登陆完成后插件进行初始化！", "CQXQ", MB_OK);
 				return 0;
 			}
 			if (plugins[SelectedIndex].menus.empty()) return 0;
@@ -547,7 +573,7 @@ LRESULT GUI::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam)
 			);
 			if (ret)
 			{
-				const auto m = IntMethod(GetProcAddress(plugins[SelectedIndex].dll, plugins[SelectedIndex].menus[ret - 1].second.c_str()));
+				const auto m = IntMethod(plugins[SelectedIndex].menus[ret - 1].second);
 				if (m)
 				{
 					m();
@@ -624,7 +650,7 @@ LRESULT GUI::CreateMainPage()
 		355, 426,
 		m_hwnd,
 		reinterpret_cast<HMENU>(ID_MASTER_LVPLUGIN));
-	ListViewPlugin.SetExtendedListViewStyle(LVS_EX_DOUBLEBUFFER | LVS_EX_AUTOSIZECOLUMNS | LVS_EX_TWOCLICKACTIVATE | LVS_EX_UNDERLINEHOT);
+	ListViewPlugin.SetExtendedListViewStyle(LVS_EX_DOUBLEBUFFER | LVS_EX_AUTOSIZECOLUMNS | LVS_EX_TWOCLICKACTIVATE | LVS_EX_FULLROWSELECT);
 
 	ListViewPlugin.AddAllTextColumn(std::vector<std::pair<std::string, int>>{ {"ID", 50}, { "名称", 300 }, { "作者", 200 }, { "版本", 200 }});
 	int index = 0;
@@ -651,7 +677,7 @@ int WINAPI GUIMain()
 	// 初始化CommonControl
 	INITCOMMONCONTROLSEX icex; // Structure for control initialization.
 	icex.dwSize = sizeof(INITCOMMONCONTROLSEX);
-	icex.dwICC = ICC_STANDARD_CLASSES | ICC_TAB_CLASSES | ICC_LISTVIEW_CLASSES | ICC_PROGRESS_CLASS;
+	icex.dwICC = ICC_STANDARD_CLASSES | ICC_LISTVIEW_CLASSES;
 	InitCommonControlsEx(&icex);
 
 	// 主GUI
