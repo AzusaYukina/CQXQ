@@ -19,24 +19,25 @@ typedef int32_t (__stdcall* EvRequestAddFriend)(int32_t, int32_t, int64_t, const
 typedef int32_t (__stdcall* EvFriendAdd)(int32_t, int32_t, int64_t);
 
 
+#define XQ_StartupComplete 10000
+#define XQ_Exit 10001
 #define XQ_Load 12000
 #define XQ_Enable 12001
 #define XQ_Disable 12002
-#define XQ_StartupComplete 10000
-#define XQ_Reboot 10001
+
 
 #define XQ_FriendMsgEvent 1
 #define XQ_GroupMsgEvent 2
-#define XQ_DiscussMsgEvent 2
+#define XQ_DiscussMsgEvent 3
 #define XQ_GroupTmpMsgEvent 4
-#define XQ_DiscussTmpMsgEvent 2
+#define XQ_DiscussTmpMsgEvent 5
 
 #define XQ_FriendAddReqEvent 101
 #define XQ_FriendAddedEvent 100
 
 #define XQ_GroupInviteReqEvent 214
 #define XQ_GroupAddReqEvent 213
-#define XQ_GroupInviteOtherReqEvent 215 // 这个好像不正确
+#define XQ_GroupInviteOtherReqEvent 215 
 
 #define XQ_GroupMemberIncreaseByApply 212
 #define XQ_GroupMemberIncreaseByInvite 219

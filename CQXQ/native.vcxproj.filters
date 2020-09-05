@@ -42,6 +42,12 @@
     <ClInclude Include="EncodingConvert.h">
       <Filter>头文件</Filter>
     </ClInclude>
+    <ClInclude Include="RichMessage.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="ErrorHandler.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="native.cpp">
@@ -60,6 +66,12 @@
       <Filter>源文件</Filter>
     </ClCompile>
     <ClCompile Include="EncodingConvert.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="RichMessage.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="ErrorHandler.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
   </ItemGroup>

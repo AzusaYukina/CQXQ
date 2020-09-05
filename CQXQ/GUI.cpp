@@ -11,6 +11,7 @@
 #include <memory>
 #include <utility>
 #include <fstream>
+#include <thread>
 
 #include "GlobalVar.h"
 #include "native.h"
@@ -27,6 +28,7 @@ using namespace std;
 #define ID_MASTER_BUTTONMENU 1003
 #define ID_MASTER_STATICDESC 1004
 #define ID_MASTER_LVPLUGIN 1005
+#define ID_MASTER_BUTTONRECVSELFMSG 1006
 
 template <typename T>
 class BaseWindow
@@ -206,7 +208,7 @@ public:
 	// 长度最长为1000
 	[[nodiscard]] std::string GetItemText(int index, int subindex = 0)
 	{
-		char buffer[1000];
+		char buffer[1000]{};
 		ListView_GetItemText(hwnd, index, subindex, buffer, 1000);
 		return buffer;
 	}
@@ -423,6 +425,7 @@ public:
 	BasicButton ButtonEnable;
 	BasicButton ButtonReload;
 	BasicButton ButtonMenu;
+	BasicButton ButtonSwitchRecvSelfMsg;
 
 	std::map<std::string, HFONT> Fonts;
 	LRESULT CreateMainPage();
@@ -460,7 +463,7 @@ LRESULT GUI::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam)
 		return 0;
 	}
 	case WM_CLOSE:
-		DestroyWindow(m_hwnd);
+		ShowWindow(m_hwnd, SW_HIDE);
 		return 0;
 
 	case WM_DESTROY:
@@ -470,6 +473,7 @@ LRESULT GUI::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam)
 			DeleteObject(font.second);
 		}
 		Fonts.clear();
+		m_hwnd = nullptr;
 		return 0;
 
 	case WM_PAINT:
@@ -495,7 +499,7 @@ LRESULT GUI::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam)
 		{
 			if (SelectedIndex == -1)
 			{
-				MessageBoxA(m_hwnd, "请先双击左侧列表选择一个插件!", "CQXQ", MB_OK);
+				MessageBoxA(m_hwnd, "请先单击左侧列表选择一个插件!", "CQXQ", MB_OK);
 				return 0;
 			}
 			if (plugins[SelectedIndex].enabled)
@@ -540,7 +544,7 @@ LRESULT GUI::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam)
 		{
 			if (SelectedIndex == -1)
 			{
-				MessageBoxA(m_hwnd, "请先双击左侧列表选择一个插件!", "CQXQ", MB_OK);
+				MessageBoxA(m_hwnd, "请先单击左侧列表选择一个插件!", "CQXQ", MB_OK);
 				return 0;
 			}
 			if (!plugins[SelectedIndex].enabled)
@@ -565,12 +569,13 @@ LRESULT GUI::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam)
 			}
 			BOOL ret = TrackPopupMenuEx(
 				hMenu,
-				TPM_LEFTALIGN | TPM_TOPALIGN | TPM_RETURNCMD | TPM_LEFTBUTTON | TPM_NOANIMATION,
+				TPM_LEFTALIGN | TPM_TOPALIGN | TPM_RETURNCMD | TPM_LEFTBUTTON,
 				curpos.x,
 				curpos.y,
 				m_hwnd,
 				nullptr
 			);
+			DestroyMenu(hMenu);
 			if (ret)
 			{
 				const auto m = IntMethod(plugins[SelectedIndex].menus[ret - 1].second);
@@ -579,12 +584,35 @@ LRESULT GUI::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam)
 					m();
 				}
 			}
-			DestroyMenu(hMenu);
 		}
 		return 0;
 		case ID_MASTER_BUTTONRELOAD:
 		{
 			MessageBoxA(m_hwnd, "暂未实现，敬请期待", "CQXQ", MB_OK);
+		}
+		return 0;
+		case ID_MASTER_BUTTONRECVSELFMSG:
+		{
+			RecvSelfEvent = !RecvSelfEvent;
+			ButtonSwitchRecvSelfMsg.SetText(RecvSelfEvent ? "停止接收来自自己的事件" : "开始接收来自自己的事件");
+			std::filesystem::path p(rootPath);
+			p.append("CQPlugins").append(".cqxq_recv_self_event.enable");
+			if (RecvSelfEvent)
+			{
+				if (!std::filesystem::exists(p))
+				{
+					ofstream fstream(p); // 创建文件
+					fstream << "This file is used to enable CQXQ to receive message from the robot itself";
+					fstream.close();
+				}
+			}
+			else
+			{
+				if (std::filesystem::exists(p))
+				{
+					std::filesystem::remove(p);
+				}
+			}
 		}
 		return 0;
 		default:
@@ -595,14 +623,14 @@ LRESULT GUI::HandleMessage(UINT uMsg, WPARAM wParam, LPARAM lParam)
 	{
 		switch (reinterpret_cast<LPNMHDR>(lParam)->code)
 		{
-		case LVN_ITEMACTIVATE:
+		case LVN_ITEMCHANGED:
 		{
 			if (reinterpret_cast<LPNMHDR>(lParam)->idFrom == ID_MASTER_LVPLUGIN)
 			{
-				auto lpnmitem = reinterpret_cast<LPNMITEMACTIVATE>(lParam);
-				if (lpnmitem->iItem != -1)
+				LPNMLISTVIEW pnmv = reinterpret_cast<LPNMLISTVIEW>(lParam);
+				if (pnmv->iItem != -1 && !(pnmv->uOldState & LVIS_SELECTED) && (pnmv->uNewState & LVIS_SELECTED))
 				{
-					std::string text = ListViewPlugin.GetItemText(lpnmitem->iItem);
+					std::string text = ListViewPlugin.GetItemText(pnmv->iItem);
 					SelectedIndex = std::stoi(text);
 					StaticDesc.SetText(plugins[SelectedIndex].description);
 					if (plugins[SelectedIndex].enabled)
@@ -638,10 +666,12 @@ LRESULT GUI::CreateMainPage()
 		500, 280, 70, 30, m_hwnd, reinterpret_cast<HMENU>(ID_MASTER_BUTTONRELOAD));
 	ButtonMenu.Create("菜单", WS_CHILD | WS_VISIBLE, 0,
 		600, 280, 70, 30, m_hwnd, reinterpret_cast<HMENU>(ID_MASTER_BUTTONMENU));
+	ButtonSwitchRecvSelfMsg.Create(RecvSelfEvent ? "停止接收来自自己的事件" : "开始接收来自自己的事件", WS_CHILD | WS_VISIBLE, 0,
+		400, 320, 270, 30, m_hwnd, reinterpret_cast<HMENU>(ID_MASTER_BUTTONRECVSELFMSG));
 
-	StaticDesc.Create("双击左侧列表选择一个插件",
+	StaticDesc.Create("单击左侧列表选择一个插件",
 		WS_CHILD | WS_VISIBLE, 0,
-		400, 30, 300, 200, m_hwnd, reinterpret_cast<HMENU>(ID_MASTER_STATICDESC));
+		400, 30, 270, 200, m_hwnd, reinterpret_cast<HMENU>(ID_MASTER_STATICDESC));
 
 	ListViewPlugin.Create("",
 		WS_CHILD | LVS_REPORT | WS_VISIBLE | WS_BORDER | LVS_SINGLESEL,
@@ -650,7 +680,7 @@ LRESULT GUI::CreateMainPage()
 		355, 426,
 		m_hwnd,
 		reinterpret_cast<HMENU>(ID_MASTER_LVPLUGIN));
-	ListViewPlugin.SetExtendedListViewStyle(LVS_EX_DOUBLEBUFFER | LVS_EX_AUTOSIZECOLUMNS | LVS_EX_TWOCLICKACTIVATE | LVS_EX_FULLROWSELECT);
+	ListViewPlugin.SetExtendedListViewStyle(LVS_EX_DOUBLEBUFFER | LVS_EX_AUTOSIZECOLUMNS | LVS_EX_FULLROWSELECT);
 
 	ListViewPlugin.AddAllTextColumn(std::vector<std::pair<std::string, int>>{ {"ID", 50}, { "名称", 300 }, { "作者", 200 }, { "版本", 200 }});
 	int index = 0;
@@ -665,11 +695,14 @@ LRESULT GUI::CreateMainPage()
 	ButtonReload.SetFont(Yahei18);
 	ButtonMenu.SetFont(Yahei18);
 	StaticDesc.SetFont(Yahei18);
+	ButtonSwitchRecvSelfMsg.SetFont(Yahei18);
 	return 0;
 }
 
+// GUI
+GUI MainWindow;
 
-int WINAPI GUIMain()
+int __stdcall InitGUI()
 {
 	// hDllModule不应为空
 	assert(hDllModule);
@@ -680,25 +713,23 @@ int WINAPI GUIMain()
 	icex.dwICC = ICC_STANDARD_CLASSES | ICC_LISTVIEW_CLASSES;
 	InitCommonControlsEx(&icex);
 
-	// 主GUI
-	GUI MainWindow;
-
 	if (!MainWindow.Create("CQXQ GUI", WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_BORDER | WS_CLIPSIBLINGS, 0,
-		CW_USEDEFAULT, CW_USEDEFAULT, 780, 500))
+		CW_USEDEFAULT, CW_USEDEFAULT, 710, 500))
 	{
 		return 0;
 	}
 
-	ShowWindow(MainWindow.Window(), SW_SHOWDEFAULT);
-
-	// Run the message loop.
-
-	MSG msg = {};
-	while (GetMessageA(&msg, nullptr, 0, 0))
-	{
-		TranslateMessage(&msg);
-		DispatchMessageA(&msg);
-	}
-
+	ShowWindow(MainWindow.Window(), SW_HIDE);
 	return 0;
+}
+
+void __stdcall ShowMainWindowAsync()
+{
+	ShowWindowAsync(MainWindow.Window(), SW_SHOW);
+	SetForegroundWindow(MainWindow.Window());
+}
+
+void __stdcall DestroyMainWindow()
+{
+	DestroyWindow(MainWindow.Window());
 }
