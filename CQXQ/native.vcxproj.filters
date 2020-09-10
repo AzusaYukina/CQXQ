@@ -48,6 +48,12 @@
     <ClInclude Include="ErrorHandler.h">
       <Filter>头文件</Filter>
     </ClInclude>
+    <ClInclude Include="XQAPI.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="CQPluginLoader.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="native.cpp">
@@ -72,6 +78,9 @@
       <Filter>源文件</Filter>
     </ClCompile>
     <ClCompile Include="ErrorHandler.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="CQPluginLoader.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
   </ItemGroup>
